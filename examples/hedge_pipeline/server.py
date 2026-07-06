@@ -80,6 +80,16 @@ async def startup_event() -> None:
         config.small.base_url,
         config.big.base_urls,
     )
+    tok_cfg = config.tokenizer
+    if tok_cfg.use_local_tokenizer:
+        logger.info(
+            "Warming tokenizer '%s' for parallel pre-tokenization …",
+            tok_cfg.model_name_or_path,
+        )
+        await _pipeline.warm_tokenizer()
+        logger.info("Tokenizer ready (parallel tokenization enabled).")
+    else:
+        logger.info("Parallel tokenization disabled (HEDGE_USE_LOCAL_TOKENIZER=0).")
 
 
 @app.on_event("shutdown")
@@ -246,6 +256,11 @@ async def get_pipeline_config() -> JSONResponse:
                 "max_tokens": cfg.big.max_tokens,
                 "temperature": cfg.big.temperature,
                 "timeout": cfg.big.timeout,
+            },
+            "tokenizer": {
+                "model_name_or_path": cfg.tokenizer.model_name_or_path,
+                "use_local_tokenizer": cfg.tokenizer.use_local_tokenizer,
+                "max_workers": cfg.tokenizer.max_workers,
             },
             "stream_filler": cfg.stream_filler,
         }

@@ -67,18 +67,63 @@ class BigModelConfig:
 
 
 @dataclass
+class TokenizerConfig:
+    """
+    Configuration for the proxy-side HuggingFace tokenizer used to
+    pre-tokenize prompts in parallel with the small model call.
+
+    When ``use_local_tokenizer=True`` (the default), the pipeline loads the
+    big model's tokenizer once at startup.  At request time it tokenizes the
+    original user prompt concurrently with the small (filler) model call so
+    that the full tokenization cost is off the critical path.  After the
+    filler completes, only the short filler-hint suffix (~80 tokens) needs
+    to be tokenized.  The concatenated token-ID list is then sent directly
+    to the big model via ``POST /v1/completions``, which bypasses vLLM's
+    internal tokenization step and lets prefill start immediately.
+
+    When ``use_local_tokenizer=False``, the pipeline falls back to the
+    original ``/v1/chat/completions`` text path (no parallel tokenization).
+    """
+
+    # Tokenizer model name or local path.  Must match the big model to ensure
+    # token IDs are valid.  Defaults to the same value as BIG_MODEL_NAME.
+    model_name_or_path: str = os.getenv(
+        "TOKENIZER_MODEL_NAME",
+        os.getenv("BIG_MODEL_NAME", "Qwen/Qwen3-30B-A3B"),
+    )
+
+    # Enable parallel pre-tokenization and /v1/completions path.
+    # Set to 0 to disable and use the original /v1/chat/completions path.
+    use_local_tokenizer: bool = bool(int(os.getenv("HEDGE_USE_LOCAL_TOKENIZER", "1")))
+
+    # Number of threads reserved for tokenization via run_in_executor.
+    # 2 is enough since tokenization is fast and rarely concurrent per process.
+    max_workers: int = int(os.getenv("TOKENIZER_MAX_WORKERS", "2"))
+
+    # The string that closes each chat turn in the model's chat template.
+    # For Qwen3 / ChatML this is "\n<|im_end|>\n".
+    # Used to strip the user-turn close from the pre-tokenized base so the
+    # filler hint can be appended inside the user turn before re-closing it.
+    turn_end_str: str = os.getenv("TOKENIZER_TURN_END_STR", "\n<|im_end|>\n")
+
+    # The generation-prompt string inserted after the last user turn.
+    # For Qwen3 / ChatML this is "<|im_start|>assistant\n".
+    generation_prompt_str: str = os.getenv("TOKENIZER_GEN_PROMPT_STR", "<|im_start|>assistant\n")
+
+
+@dataclass
 class PipelineConfig:
     """Top-level configuration for the hedge pipeline."""
 
     small: SmallModelConfig = field(default_factory=SmallModelConfig)
     big: BigModelConfig = field(default_factory=BigModelConfig)
+    tokenizer: TokenizerConfig = field(default_factory=TokenizerConfig)
 
-    # Template used to inject the filler answer into the big-model prompt.
-    # {original_prompt} and {filler_text} are substituted at runtime.
-    augmented_prompt_template: str = (
-        "{original_prompt}\n\n"
-        "[Preliminary answer from a fast model: {filler_text}]\n\n"
-        "Now provide the correct, complete answer:"
+    # Filler-hint suffix template.  ``{filler_text}`` is substituted at
+    # runtime and this string is inserted *inside* the user turn after the
+    # original user message, before the generation prompt.
+    filler_hint_template: str = (
+        "\n\n[Preliminary answer from a fast model: {filler_text}]\n\nNow provide the correct, complete answer:"
     )
 
     # When True, stream the filler answer token-by-token to the client as
@@ -89,11 +134,21 @@ class PipelineConfig:
     log_level: str = os.getenv("HEDGE_LOG_LEVEL", "INFO")
 
     def build_augmented_prompt(self, original_prompt: str, filler_text: str) -> str:
-        """Return the big-model prompt that incorporates the filler answer."""
-        return self.augmented_prompt_template.format(
-            original_prompt=original_prompt,
-            filler_text=filler_text.strip(),
-        )
+        """
+        Return the full augmented user-message string for the text-based
+        ``/v1/chat/completions`` path (used when ``use_local_tokenizer=False``
+        or as a fallback).
+        """
+        return original_prompt + self.build_augmented_suffix(filler_text)
+
+    def build_augmented_suffix(self, filler_text: str) -> str:
+        """
+        Return only the filler-hint suffix that is appended to the original
+        user message *inside* the user turn.  Does not include the turn-close
+        or generation-prompt tokens — those are added by
+        ``_tokenize_filler_suffix`` when building the token-ID list.
+        """
+        return self.filler_hint_template.format(filler_text=filler_text.strip())
 
     @classmethod
     def from_env(cls) -> PipelineConfig:
@@ -101,6 +156,7 @@ class PipelineConfig:
         return cls(
             small=SmallModelConfig(),
             big=BigModelConfig(),
+            tokenizer=TokenizerConfig(),
         )
 
 

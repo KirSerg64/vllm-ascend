@@ -7,34 +7,48 @@ model while the authoritative answer from a large thinking model is computed.
 ## Architecture
 
 ```
-User Request
-     │
-     ├─────────────────────────────────────────┐
-     ▼                                         ▼
-[Small model: Qwen3-0.6B]               [Big model: Qwen3-Omni-30B-A3B W8A8]
- ~50 ms TTFT                             ~950 ms TTFT
- Streams quick filler to user            Receives original_prompt + filler hint
- Output injected into big-model prompt   Streams final answer to user
-     │                                         │
-     ▼                                         ▼
-[User sees fast response]          [User sees corrected/full response]
+T=0ms   User Request arrives
+         │
+         ├─── small model call (HTTP) ──────────────────────────────────────────┐
+         │                                                                      │
+         ├─── tokenize(original_prompt) in thread executor ─── done ~2–10ms   │
+         │                                                                      │
+         │    ← filler tokens streamed to client as they arrive (~50ms TTFT)   │
+         │                                                                      │
+T=50ms  ← small model done; tokenize(filler_suffix) ~1ms ──────────────────────┘
+         │
+         ├─── concatenate token IDs: [original] + [filler_suffix]
+         │
+         └─── POST /v1/completions  {"prompt": [int, int, ...]}
+                  └─ vLLM skips tokenization → prefill starts immediately
+                  └─ big model streams final answer (~950ms TTFT)
 ```
 
 ### Flow
 
 1. User sends a message to the hedge server.
-2. Small model (Qwen3-0.6B) generates a filler answer (~50 ms TTFT) and
-   streams it to the client immediately.
-3. After the filler is complete, the big model receives an augmented prompt
-   (original question + filler answer as a thinking hint).
-4. Big model streams the authoritative answer to the client (~950 ms TTFT, but
-   the user already has a preliminary response).
+2. Two tasks start **concurrently at T=0**:
+   - The small model (Qwen3-0.6B) generates a filler answer and streams it
+     to the client (~50 ms TTFT).
+   - The proxy tokenizes the original prompt in a thread executor (~2–10 ms).
+3. When the small model finishes, only the short filler-hint suffix needs to
+   be tokenized (~1 ms; ≤80 tokens).
+4. The concatenated token-ID list is sent directly to the big model via
+   `POST /v1/completions` with `"prompt": [int, ...]`, bypassing vLLM's
+   internal tokenisation step and letting NPU prefill begin immediately.
+5. The big model streams the authoritative answer (~950 ms TTFT, but the
+   user already has a preliminary response).
+
+**Net saving vs. the previous text-based path: ~10–20 ms per request**, fully
+hidden by existing latency and with zero hardware cost.
 
 ### Key features
 
 | Feature | Details |
 |---|---|
-| **Graceful degradation** | Small model timeout → big model uses original prompt |
+| **Parallel tokenization** | Original prompt tokenized concurrently with small model call |
+| **`/v1/completions` token-ID path** | Bypasses vLLM's tokenizer on the big model server |
+| **Graceful degradation** | Any failure falls back to `/v1/chat/completions` text path |
 | **Round-robin load balancing** | Multiple big-model instances supported |
 | **SSE streaming** | Two event types (`filler`, `final`) for client-side rendering |
 | **Async/await** | Full async implementation for high concurrency |
@@ -46,8 +60,11 @@ User Request
 ## Prerequisites
 
 ```bash
-pip install fastapi uvicorn aiohttp httpx pydantic
+pip install fastapi uvicorn aiohttp httpx pydantic transformers
 ```
+
+> `transformers` is required for local tokenization (parallel pre-tokenization
+> feature).  Set `HEDGE_USE_LOCAL_TOKENIZER=0` to skip it.
 
 ---
 
@@ -139,6 +156,21 @@ All configuration is driven by environment variables.
 | `HEDGE_STREAM_FILLER` | `1` | `1` = stream filler tokens as they arrive; `0` = buffer first |
 | `HEDGE_LOG_LEVEL` | `INFO` | Python log level for the pipeline and server |
 
+### Tokenizer (parallel pre-tokenization)
+
+| Variable | Default | Description |
+|---|---|---|
+| `HEDGE_USE_LOCAL_TOKENIZER` | `1` | `1` = enable parallel tokenization + `/v1/completions` path; `0` = use original text path |
+| `TOKENIZER_MODEL_NAME` | same as `BIG_MODEL_NAME` | HuggingFace model name/path for the tokenizer loaded in the proxy |
+| `TOKENIZER_MAX_WORKERS` | `2` | Thread-pool size for tokenization (rarely needs increasing) |
+| `TOKENIZER_TURN_END_STR` | `\n<\|im_end\|>\n` | Chat-template user-turn-close string (ChatML / Qwen3 default) |
+| `TOKENIZER_GEN_PROMPT_STR` | `<\|im_start\|>assistant\n` | Chat-template generation-prompt string (ChatML / Qwen3 default) |
+
+> **Note on `TOKENIZER_TURN_END_STR` / `TOKENIZER_GEN_PROMPT_STR`**: these
+> must match the chat template of your big model.  The defaults work for any
+> ChatML-format model (Qwen3, Qwen2, Mistral-instruct, etc.).  Override them
+> if you use a model with a different template (e.g. LLaMA-3's `<|eot_id|>`).
+
 ---
 
 ## API Reference
@@ -216,6 +248,8 @@ from examples.hedge_pipeline.pipeline import HedgePipeline
 async def main():
     config = PipelineConfig()
     pipeline = HedgePipeline(config)
+    # Warm the tokenizer once before serving requests.
+    await pipeline.warm_tokenizer()
 
     async for event in pipeline.run("What is quantum entanglement?"):
         print(f"[{event['phase']}] {event['text']}", end="", flush=True)
@@ -229,13 +263,14 @@ asyncio.run(main())
 
 ## Expected Performance
 
-| Metric | Value |
-|---|---|
-| Filler TTFT | ~50 ms |
-| Big model TTFT | ~950 ms (user already has filler) |
-| User-perceived latency | ~50 ms |
-| Filler quality | Preliminary answer from Qwen3-0.6B |
-| Final quality | Full reasoning from Qwen3-Omni-30B-A3B-Thinking |
+| Metric | Without parallel tokenization | With parallel tokenization |
+|---|---|---|
+| Filler TTFT | ~50 ms | ~50 ms |
+| Big model TTFT | ~950 ms | ~930–940 ms |
+| Tokenization on critical path | ~10–25 ms | ~1 ms (suffix only) |
+| User-perceived latency | ~50 ms | ~50 ms |
+| Filler quality | Preliminary answer from Qwen3-0.6B | ← same |
+| Final quality | Full reasoning from Qwen3-Omni-30B-A3B-Thinking | ← same |
 
 ---
 
@@ -244,8 +279,8 @@ asyncio.run(main())
 | File | Description |
 |---|---|
 | `__init__.py` | Package marker |
-| `config.py` | Configuration dataclasses; all params from env vars |
-| `pipeline.py` | Core async dual-model orchestration |
-| `server.py` | FastAPI proxy with SSE streaming and round-robin load balancing |
+| `config.py` | Configuration dataclasses including `TokenizerConfig`; all params from env vars |
+| `pipeline.py` | Core async dual-model orchestration with parallel tokenization and `/v1/completions` path |
+| `server.py` | FastAPI proxy with SSE streaming, round-robin load balancing, and tokenizer warm-up |
 | `client_example.py` | CLI client that prints filler + final responses |
 | `README.md` | This file |
