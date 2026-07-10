@@ -1,0 +1,6 @@
+# WAV files used for simulation testing — not committed to the repo
+test_audio.wav
+*.wav
+# sherpa-onnx model files — download separately (see README.md)
+*.onnx
+tokens.txt
