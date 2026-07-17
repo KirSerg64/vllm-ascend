@@ -36,17 +36,16 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
 
-def _load_config(config_path: str) -> Dict[str, Any]:
+def _load_config(config_path: str) -> dict[str, Any]:
     with open(config_path) as f:
         return yaml.safe_load(f)
 
@@ -62,7 +61,7 @@ def _setup_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def _build_engine(config: Dict[str, Any]) -> Any:
+def _build_engine(config: dict[str, Any]) -> Any:
     """Construct and return a vllm.AsyncLLMEngine."""
     # isort: skip_file
     from vllm import AsyncEngineArgs, AsyncLLMEngine  # type: ignore[import]
@@ -99,7 +98,7 @@ async def _prewarm_engine(engine: Any, system_prompt: str) -> None:
     logger.info("LLM engine pre-warm complete.")
 
 
-async def _run_server(config: Dict[str, Any], engine: Any) -> None:
+async def _run_server(config: dict[str, Any], engine: Any) -> None:
     import uvicorn  # type: ignore[import]
 
     from server import create_app
@@ -108,20 +107,20 @@ async def _run_server(config: Dict[str, Any], engine: Any) -> None:
     # Load ASR model based on backend configuration
     asr_cfg = config.get("asr", {})
     backend = asr_cfg.get("backend", "sherpa-onnx")
-    
+
     if backend == "websocket":
         from asr_worker_websocket import ASRWorkerWebSocket
+
         asr_worker = ASRWorkerWebSocket(asr_cfg)
     else:
         from asr_worker import ASRWorker
+
         asr_worker = ASRWorker(asr_cfg)
-    
+
     asr_worker.load()
 
     session_manager = SessionManager(
-        session_timeout_minutes=int(
-            config.get("server", {}).get("session_timeout_minutes", 30)
-        )
+        session_timeout_minutes=int(config.get("server", {}).get("session_timeout_minutes", 30))
     )
 
     app = create_app(
@@ -137,21 +136,17 @@ async def _run_server(config: Dict[str, Any], engine: Any) -> None:
 
     logger.info("Starting Voice Agent server on %s:%d", host, port)
 
-    uvicorn_config = uvicorn.Config(
-        app=app, host=host, port=port, log_level="warning"
-    )
+    uvicorn_config = uvicorn.Config(app=app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(uvicorn_config)
     await server.serve()
 
 
-async def _run_simulate(
-    config: Dict[str, Any], engine: Any, audio_file: str
-) -> None:
+async def _run_simulate(config: dict[str, Any], engine: Any, audio_file: str) -> None:
     """Run a single offline simulation session without starting a web server."""
     from audio_pipeline import AudioPipeline
     from orchestrator import Orchestrator
     from server import _log_token_stream
-    from session_manager import SessionManager, SessionState
+    from session_manager import SessionManager
     from simulation import simulate_session
 
     asr_cfg = config.get("asr", {})
@@ -169,14 +164,16 @@ async def _run_simulate(
 
     # Load ASR based on backend configuration
     backend = asr_cfg.get("backend", "sherpa-onnx")
-    
+
     if backend == "websocket":
         from asr_worker_websocket import ASRWorkerWebSocket
+
         asr_worker = ASRWorkerWebSocket(asr_cfg)
     else:
         from asr_worker import ASRWorker
+
         asr_worker = ASRWorker(asr_cfg)
-    
+
     asr_worker.load()
 
     session_manager = SessionManager()
@@ -201,11 +198,11 @@ async def _run_simulate(
         ws_send_queue=ws_send_queue,
     )
 
-    print(f"\n{'='*60}")
-    print(f"  Voice Agent — Simulation Mode")
+    print(f"\n{'=' * 60}")
+    print("  Voice Agent — Simulation Mode")
     print(f"  Audio: {audio_file}")
     print(f"  Session: {session_id}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     orch_task = asyncio.create_task(orch.run())
     log_task = asyncio.create_task(_log_token_stream(ws_send_queue, session_id))
@@ -245,15 +242,11 @@ async def _async_main(args: argparse.Namespace) -> None:
 
     # Pre-warm engine if configured
     if config.get("llm", {}).get("prewarm_on_startup", True):
-        system_prompt = config.get("conversation", {}).get(
-            "system_prompt", "You are a helpful assistant."
-        )
+        system_prompt = config.get("conversation", {}).get("system_prompt", "You are a helpful assistant.")
         await _prewarm_engine(engine, system_prompt)
 
     if args.simulate:
-        audio_file = args.audio_file or config.get("simulation", {}).get(
-            "audio_file", "test_audio.wav"
-        )
+        audio_file = args.audio_file or config.get("simulation", {}).get("audio_file", "test_audio.wav")
         if not Path(audio_file).exists():
             logger.error("Audio file not found: %s", audio_file)
             sys.exit(1)
@@ -265,9 +258,7 @@ async def _async_main(args: argparse.Namespace) -> None:
 def main() -> None:
     _setup_logging()
 
-    parser = argparse.ArgumentParser(
-        description="Voice Agent: ASR → LLM streaming pipeline on Ascend NPU"
-    )
+    parser = argparse.ArgumentParser(description="Voice Agent: ASR → LLM streaming pipeline on Ascend NPU")
     parser.add_argument(
         "--config",
         default=str(Path(__file__).parent / "config.yaml"),

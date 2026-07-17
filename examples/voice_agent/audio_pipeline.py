@@ -39,10 +39,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
-
 from asr_worker import ASRWorker
 from session_manager import SessionState
 
@@ -77,8 +76,8 @@ class AudioPipeline:
         self,
         session: SessionState,
         asr_worker: ASRWorker,
-        vad_config: Dict[str, Any],
-        asr_config: Dict[str, Any],
+        vad_config: dict[str, Any],
+        asr_config: dict[str, Any],
     ) -> None:
         self._session = session
         self._asr = asr_worker
@@ -87,26 +86,16 @@ class AudioPipeline:
 
         self._sample_rate: int = asr_config.get("sample_rate", 16000)
         self._chunk_size_ms: int = asr_config.get("chunk_size_ms", 20)
-        self._chunk_samples: int = int(
-            self._sample_rate * self._chunk_size_ms / 1000
-        )
+        self._chunk_samples: int = int(self._sample_rate * self._chunk_size_ms / 1000)
 
         # silero-vad state
-        self._vad_model: Optional[Any] = None
-        self._vad_utils: Optional[Any] = None
+        self._vad_model: Any | None = None
+        self._vad_utils: Any | None = None
         self._vad_enabled: bool = vad_config.get("enabled", True)
         self._vad_threshold: float = float(vad_config.get("threshold", 0.5))
-        self._vad_window_samples: int = int(
-            self._sample_rate * vad_config.get("window_size_ms", 32) / 1000
-        )
-        self._min_speech_samples: int = int(
-            self._sample_rate
-            * vad_config.get("min_speech_duration_ms", 100)
-            / 1000
-        )
-        self._speech_pad_samples: int = int(
-            self._sample_rate * vad_config.get("speech_pad_ms", 50) / 1000
-        )
+        self._vad_window_samples: int = int(self._sample_rate * vad_config.get("window_size_ms", 32) / 1000)
+        self._min_speech_samples: int = int(self._sample_rate * vad_config.get("min_speech_duration_ms", 100) / 1000)
+        self._speech_pad_samples: int = int(self._sample_rate * vad_config.get("speech_pad_ms", 50) / 1000)
 
         # State machine
         self._is_speech_active: bool = False
@@ -118,9 +107,7 @@ class AudioPipeline:
         self._last_partial_ref: list = [""]
 
         # Executor for blocking VAD inference
-        self._executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix=f"vad-{session.session_id}"
-        )
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"vad-{session.session_id}")
 
         # Raw byte buffer for incomplete chunks
         self._byte_buffer = b""
@@ -140,13 +127,10 @@ class AudioPipeline:
             )
             self._vad_model = model
             self._vad_utils = utils
-            logger.info(
-                "[%s] silero-vad loaded.", self._session.session_id
-            )
+            logger.info("[%s] silero-vad loaded.", self._session.session_id)
         except Exception as exc:
             logger.warning(
-                "[%s] Could not load silero-vad (%s). "
-                "VAD disabled — all audio will be treated as speech.",
+                "[%s] Could not load silero-vad (%s). VAD disabled — all audio will be treated as speech.",
                 self._session.session_id,
                 exc,
             )
@@ -179,9 +163,7 @@ class AudioPipeline:
         if self._byte_buffer:
             # Pad to a full chunk with silence
             samples_needed = self._chunk_samples * 2
-            padded = self._byte_buffer + b"\x00" * (
-                samples_needed - len(self._byte_buffer)
-            )
+            padded = self._byte_buffer + b"\x00" * (samples_needed - len(self._byte_buffer))
             await self._process_chunk(padded)
             self._byte_buffer = b""
 
@@ -225,9 +207,7 @@ class AudioPipeline:
             return True  # treat everything as speech when VAD is off
 
         loop = asyncio.get_running_loop()
-        confidence = await loop.run_in_executor(
-            self._executor, self._run_vad_sync, pcm_float
-        )
+        confidence = await loop.run_in_executor(self._executor, self._run_vad_sync, pcm_float)
         return confidence >= self._vad_threshold
 
     def _run_vad_sync(self, pcm_float: np.ndarray) -> float:
@@ -238,9 +218,7 @@ class AudioPipeline:
         tensor = torch.from_numpy(pcm_float)
         # Pad/trim to the expected window size
         if len(tensor) < self._vad_window_samples:
-            tensor = torch.nn.functional.pad(
-                tensor, (0, self._vad_window_samples - len(tensor))
-            )
+            tensor = torch.nn.functional.pad(tensor, (0, self._vad_window_samples - len(tensor)))
         else:
             tensor = tensor[: self._vad_window_samples]
 

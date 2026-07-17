@@ -25,20 +25,22 @@ Usage
 -----
 From the CLI (via ``main.py --simulate``) or directly::
 
-    asyncio.run(simulate_session(
-        wav_path="test_audio.wav",
-        push_audio_fn=pipeline.push_audio,
-        flush_fn=pipeline.flush,
-        chunk_ms=20,
-        playback_speed=1.0,
-    ))
+    asyncio.run(
+        simulate_session(
+            wav_path="test_audio.wav",
+            push_audio_fn=pipeline.push_audio,
+            flush_fn=pipeline.flush,
+            chunk_ms=20,
+            playback_speed=1.0,
+        )
+    )
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, Coroutine
+from collections.abc import Callable, Coroutine
 
 import numpy as np
 
@@ -73,9 +75,7 @@ async def simulate_session(
     try:
         import soundfile as sf  # type: ignore[import]
     except ImportError as exc:
-        raise RuntimeError(
-            "soundfile is not installed. Run: pip install soundfile"
-        ) from exc
+        raise RuntimeError("soundfile is not installed. Run: pip install soundfile") from exc
 
     logger.info("Loading audio file: %s", wav_path)
     data, file_sr = sf.read(wav_path, dtype="float32", always_2d=False)
@@ -87,21 +87,17 @@ async def simulate_session(
     # Resample if needed
     if file_sr != sample_rate:
         try:
-            from scipy.signal import resample_poly  # type: ignore[import]
             import math
+
+            from scipy.signal import resample_poly  # type: ignore[import]
 
             gcd = math.gcd(sample_rate, file_sr)
             up = sample_rate // gcd
             down = file_sr // gcd
             data = resample_poly(data, up, down).astype(np.float32)
-            logger.info(
-                "Resampled audio: %d Hz → %d Hz", file_sr, sample_rate
-            )
+            logger.info("Resampled audio: %d Hz → %d Hz", file_sr, sample_rate)
         except ImportError as exc:
-            raise RuntimeError(
-                "scipy is required for audio resampling. "
-                "Run: pip install scipy"
-            ) from exc
+            raise RuntimeError("scipy is required for audio resampling. Run: pip install scipy") from exc
 
     # Convert float32 [-1, 1] to int16 PCM
     pcm_int16 = (data * 32767.0).clip(-32768, 32767).astype(np.int16)

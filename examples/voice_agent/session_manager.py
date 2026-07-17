@@ -33,7 +33,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from metrics import SessionMetrics
 
@@ -51,7 +51,7 @@ class SessionState:
     # -----------------------------------------------------------------
     # List of {"role": "user"|"assistant", "content": str} dicts.
     # The system prompt is prepended at prompt-build time, not stored here.
-    conversation_history: List[Dict[str, str]] = field(default_factory=list)
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
 
     # -----------------------------------------------------------------
     # ASR state
@@ -68,7 +68,7 @@ class SessionState:
     # LLM / barge-in state
     # -----------------------------------------------------------------
     # Request ID of the currently in-flight LLM generation, or None
-    current_llm_request_id: Optional[str] = None
+    current_llm_request_id: str | None = None
     # True while the LLM is streaming tokens to the client
     is_bot_speaking: bool = False
     # asyncio Queue that the LLM orchestrator writes tokens into.
@@ -108,11 +108,9 @@ class SessionState:
         self.conversation_history.append({"role": "user", "content": text})
 
     def append_assistant_turn(self, text: str) -> None:
-        self.conversation_history.append(
-            {"role": "assistant", "content": text}
-        )
+        self.conversation_history.append({"role": "assistant", "content": text})
 
-    def get_history_window(self, max_turns: int) -> List[Dict[str, str]]:
+    def get_history_window(self, max_turns: int) -> list[dict[str, str]]:
         """Return the last *max_turns* user+assistant pairs."""
         # Each "turn" = 1 user message + 1 assistant message = 2 entries.
         max_entries = max_turns * 2
@@ -131,7 +129,7 @@ class SessionManager:
     """
 
     def __init__(self, session_timeout_minutes: int = 30) -> None:
-        self._sessions: Dict[str, SessionState] = {}
+        self._sessions: dict[str, SessionState] = {}
         self._lock = asyncio.Lock()
         self._timeout_seconds = session_timeout_minutes * 60
 
@@ -139,14 +137,12 @@ class SessionManager:
         async with self._lock:
             if session_id not in self._sessions:
                 logger.info("Creating new session: %s", session_id)
-                self._sessions[session_id] = SessionState(
-                    session_id=session_id
-                )
+                self._sessions[session_id] = SessionState(session_id=session_id)
             state = self._sessions[session_id]
             state.touch()
             return state
 
-    async def get(self, session_id: str) -> Optional[SessionState]:
+    async def get(self, session_id: str) -> SessionState | None:
         async with self._lock:
             return self._sessions.get(session_id)
 
@@ -160,11 +156,7 @@ class SessionManager:
     async def evict_idle_sessions(self) -> None:
         """Remove sessions that have been idle longer than the timeout."""
         async with self._lock:
-            idle = [
-                sid
-                for sid, s in self._sessions.items()
-                if s.is_idle(self._timeout_seconds)
-            ]
+            idle = [sid for sid, s in self._sessions.items() if s.is_idle(self._timeout_seconds)]
             for sid in idle:
                 state = self._sessions.pop(sid)
                 state.metrics.log_summary()

@@ -26,7 +26,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +42,17 @@ class SessionMetrics:
     session_id: str
 
     # Timestamp of the first audio chunk received for the current turn
-    first_audio_ts: Optional[float] = field(default=None)
+    first_audio_ts: float | None = field(default=None)
     # Timestamp when VAD confirmed speech start
-    speech_start_ts: Optional[float] = field(default=None)
+    speech_start_ts: float | None = field(default=None)
     # Timestamp when ASR endpoint was detected (phrase complete)
-    asr_endpoint_ts: Optional[float] = field(default=None)
+    asr_endpoint_ts: float | None = field(default=None)
     # Timestamp when the LLM request was submitted
-    llm_submit_ts: Optional[float] = field(default=None)
+    llm_submit_ts: float | None = field(default=None)
     # Timestamp of the first LLM output token
-    first_token_ts: Optional[float] = field(default=None)
+    first_token_ts: float | None = field(default=None)
     # Timestamp when the full LLM response was delivered
-    response_complete_ts: Optional[float] = field(default=None)
+    response_complete_ts: float | None = field(default=None)
 
     # Accumulated per-session totals
     total_turns: int = 0
@@ -87,33 +86,30 @@ class SessionMetrics:
     # ------------------------------------------------------------------
 
     @property
-    def ttfa_ms(self) -> Optional[float]:
+    def ttfa_ms(self) -> float | None:
         """Time from first audio chunk to first LLM token (ms)."""
         if self.first_audio_ts is not None and self.first_token_ts is not None:
             return (self.first_token_ts - self.first_audio_ts) * 1000.0
         return None
 
     @property
-    def asr_latency_ms(self) -> Optional[float]:
+    def asr_latency_ms(self) -> float | None:
         """Time from first audio chunk to ASR endpoint (ms)."""
         if self.first_audio_ts is not None and self.asr_endpoint_ts is not None:
             return (self.asr_endpoint_ts - self.first_audio_ts) * 1000.0
         return None
 
     @property
-    def llm_ttft_ms(self) -> Optional[float]:
+    def llm_ttft_ms(self) -> float | None:
         """LLM time-to-first-token from request submission (ms)."""
         if self.llm_submit_ts is not None and self.first_token_ts is not None:
             return (self.first_token_ts - self.llm_submit_ts) * 1000.0
         return None
 
     @property
-    def e2e_ms(self) -> Optional[float]:
+    def e2e_ms(self) -> float | None:
         """Time from first audio to full response completion (ms)."""
-        if (
-            self.first_audio_ts is not None
-            and self.response_complete_ts is not None
-        ):
+        if self.first_audio_ts is not None and self.response_complete_ts is not None:
             return (self.response_complete_ts - self.first_audio_ts) * 1000.0
         return None
 

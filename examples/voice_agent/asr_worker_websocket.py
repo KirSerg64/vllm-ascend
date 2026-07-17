@@ -31,7 +31,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 import websockets
@@ -89,7 +89,7 @@ class ASRWorkerWebSocket:
         The ``asr`` section of config.yaml (as a dict).
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self._cfg = config
         self._asr_host = config.get("websocket_host", "localhost")
         self._asr_port = int(config.get("websocket_port", 8008))
@@ -122,8 +122,7 @@ class ASRWorkerWebSocket:
         except Exception as exc:
             logger.error("Failed to connect to ASR service at %s: %s", uri, exc)
             raise RuntimeError(
-                f"Could not connect to ASR service at {uri}. "
-                "Ensure the qwen-asr model is running on port 8008."
+                f"Could not connect to ASR service at {uri}. Ensure the qwen-asr model is running on port 8008."
             ) from exc
 
     # ------------------------------------------------------------------
@@ -153,9 +152,7 @@ class ASRWorkerWebSocket:
 
             # Try to receive response (non-blocking)
             try:
-                response = await asyncio.wait_for(
-                    stream.websocket.recv(), timeout=0.1
-                )
+                response = await asyncio.wait_for(stream.websocket.recv(), timeout=0.1)
 
                 # Parse the response
                 if isinstance(response, str):
@@ -189,7 +186,7 @@ class ASRWorkerWebSocket:
 
     async def _process_asr_result(
         self,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         stream: ASRStream,
         session_id: str,
         event_queue: asyncio.Queue,

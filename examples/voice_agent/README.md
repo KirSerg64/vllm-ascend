@@ -4,7 +4,7 @@ A low-latency, chunked streaming Voice Agent that connects a real-time ASR
 model to an LLM, targeting **TTFA (Time-To-First-Audio) < 200 ms** on Ascend
 910B NPU.
 
-```
+```text
 Audio → [VAD] → [ASR: WebSocket/Qwen-ASR or sherpa-onnx] → [LLM: Qwen3-0.6B via AsyncLLMEngine] → Token stream (mock TTS)
 ```
 
@@ -33,12 +33,12 @@ Audio → [VAD] → [ASR: WebSocket/Qwen-ASR or sherpa-onnx] → [LLM: Qwen3-0.6
 
 ### ASR Backend Options
 
-**Option 1: WebSocket-based ASR (qwen-asr)**
-- A qwen-asr model running on port 8008 (or configure another port)
-- No additional model downloads required
+- **Option 1: WebSocket-based ASR (qwen-asr)**
+  - A qwen-asr model running on port 8008 (or configure another port)
+  - No additional model downloads required
 
-**Option 2: Local sherpa-onnx**
-- A [sherpa-onnx streaming Zipformer model](#asr-model-download)
+- **Option 2: Local sherpa-onnx**
+  - A [sherpa-onnx streaming Zipformer model](#sherpa-onnx-backend)
 
 ---
 
@@ -99,7 +99,7 @@ Or export `SHERPA_ONNX_MODEL_DIR=/path/to/model`.
 
 Expected directory layout:
 
-```
+```text
 <model_dir>/
   encoder-epoch-99-avg-1.int8.onnx
   decoder-epoch-99-avg-1.int8.onnx
@@ -197,16 +197,17 @@ results.
 
 ## File Structure
 
-```
+```text
 examples/voice_agent/
-├── config.yaml         — all tunables
-├── main.py             — entry point (server or simulate)
-├── server.py           — FastAPI WebSocket + REST endpoints
-├── session_manager.py  — per-session state + idle eviction
-├── orchestrator.py     — commit logic, LLM calls, history
-├── asr_worker.py       — sherpa-onnx Zipformer wrapper
-├── audio_pipeline.py   — VAD + audio chunk routing
-├── simulation.py       — WAV file → pipeline coroutine
-├── metrics.py          — TTFA timing dataclass
-└── requirements.txt    — Python dependencies
+├── config.yaml                — all tunables
+├── main.py                    — entry point (server or simulate)
+├── server.py                  — FastAPI WebSocket + REST endpoints
+├── session_manager.py         — per-session state + idle eviction
+├── orchestrator.py            — commit logic, LLM calls, history
+├── asr_worker.py              — sherpa-onnx Zipformer wrapper
+├── asr_worker_websocket.py    — WebSocket ASR client for qwen-asr
+├── audio_pipeline.py          — VAD + audio chunk routing
+├── simulation.py              — WAV file → pipeline coroutine
+├── metrics.py                 — TTFA timing dataclass
+└── requirements.txt           — Python dependencies
 ```

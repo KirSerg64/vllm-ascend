@@ -36,7 +36,7 @@ import asyncio
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -66,12 +66,10 @@ class ASRWorker:
         The ``asr`` section of config.yaml (as a dict).
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self._cfg = config
         self._recognizer: Any = None  # sherpa_onnx.OnlineRecognizer
-        self._executor = ThreadPoolExecutor(
-            max_workers=4, thread_name_prefix="asr-worker"
-        )
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="asr-worker")
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -82,14 +80,9 @@ class ASRWorker:
         try:
             import sherpa_onnx  # type: ignore[import]
         except ImportError as exc:
-            raise RuntimeError(
-                "sherpa-onnx is not installed. "
-                "Run: pip install sherpa-onnx"
-            ) from exc
+            raise RuntimeError("sherpa-onnx is not installed. Run: pip install sherpa-onnx") from exc
 
-        model_dir = self._cfg.get("model_dir", "") or os.environ.get(
-            "SHERPA_ONNX_MODEL_DIR", ""
-        )
+        model_dir = self._cfg.get("model_dir", "") or os.environ.get("SHERPA_ONNX_MODEL_DIR", "")
         model_size = self._cfg.get("model_size", "small")
         sample_rate = self._cfg.get("sample_rate", 16000)
 
@@ -101,26 +94,18 @@ class ASRWorker:
                 "https://github.com/k2-fsa/sherpa-onnx/releases"
             )
 
-        logger.info(
-            "Loading sherpa-onnx Zipformer-%s from %s", model_size, model_dir
-        )
+        logger.info("Loading sherpa-onnx Zipformer-%s from %s", model_size, model_dir)
 
         # Build endpoint config
         endpoint_cfg = sherpa_onnx.EndpointConfig(
             rule1=sherpa_onnx.EndpointRule(
                 must_contain_nonsilence=False,
-                min_trailing_silence=float(
-                    self._cfg.get("endpoint_silence_ms", 200)
-                )
-                / 1000.0,
+                min_trailing_silence=float(self._cfg.get("endpoint_silence_ms", 200)) / 1000.0,
                 min_utterance_length=0.0,
             ),
             rule2=sherpa_onnx.EndpointRule(
                 must_contain_nonsilence=True,
-                min_trailing_silence=float(
-                    self._cfg.get("endpoint_silence_ms", 200)
-                )
-                / 1000.0,
+                min_trailing_silence=float(self._cfg.get("endpoint_silence_ms", 200)) / 1000.0,
                 min_utterance_length=0.0,
             ),
             rule3=sherpa_onnx.EndpointRule(
@@ -144,14 +129,8 @@ class ASRWorker:
             sample_rate=sample_rate,
             feature_dim=80,
             enable_endpoint_detection=True,
-            rule1_min_trailing_silence=float(
-                self._cfg.get("endpoint_silence_ms", 200)
-            )
-            / 1000.0,
-            rule2_min_trailing_silence=float(
-                self._cfg.get("endpoint_silence_ms", 200)
-            )
-            / 1000.0,
+            rule1_min_trailing_silence=float(self._cfg.get("endpoint_silence_ms", 200)) / 1000.0,
+            rule2_min_trailing_silence=float(self._cfg.get("endpoint_silence_ms", 200)) / 1000.0,
             rule3_min_utterance_length=20.0,
             decoding_method="greedy_search",
         )
@@ -217,8 +196,7 @@ class ASRWorker:
         if text and text != old_partial:
             last_partial_ref[0] = text
             asyncio.run_coroutine_threadsafe(
-                event_queue.put({"type": _ASR_PARTIAL, "text": text,
-                                 "stable_prefix": stable_text}),
+                event_queue.put({"type": _ASR_PARTIAL, "text": text, "stable_prefix": stable_text}),
                 loop,
             )
 

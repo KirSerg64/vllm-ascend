@@ -45,14 +45,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
-
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from typing import Any
 
 from audio_pipeline import AudioPipeline
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from orchestrator import Orchestrator
+from pydantic import BaseModel
 from session_manager import SessionManager
 from simulation import simulate_session
 
@@ -63,7 +62,7 @@ def create_app(
     engine: Any,
     session_manager: SessionManager,
     asr_worker: Any,
-    config: Dict[str, Any],
+    config: dict[str, Any],
 ) -> FastAPI:
     """Factory that wires up the FastAPI application.
 
@@ -109,7 +108,7 @@ def create_app(
     # ------------------------------------------------------------------
 
     @app.get("/health")
-    async def health() -> Dict[str, Any]:
+    async def health() -> dict[str, Any]:
         return {
             "status": "ok",
             "active_sessions": session_manager.active_session_count,
@@ -120,9 +119,7 @@ def create_app(
     # ------------------------------------------------------------------
 
     @app.websocket("/ws/{session_id}")
-    async def websocket_endpoint(
-        websocket: WebSocket, session_id: str
-    ) -> None:
+    async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
         await websocket.accept()
         logger.info("WebSocket connected: session=%s", session_id)
 
@@ -150,9 +147,7 @@ def create_app(
 
         # Start the orchestrator event loop and WebSocket sender as tasks
         orch_task = asyncio.create_task(orch.run())
-        sender_task = asyncio.create_task(
-            _ws_sender(websocket, ws_send_queue)
-        )
+        sender_task = asyncio.create_task(_ws_sender(websocket, ws_send_queue))
 
         try:
             async for message in websocket.iter_bytes():
@@ -180,15 +175,13 @@ def create_app(
     # ------------------------------------------------------------------
 
     class SimulateRequest(BaseModel):
-        audio_file: Optional[str] = None
-        session_id: Optional[str] = None
+        audio_file: str | None = None
+        session_id: str | None = None
 
     @app.post("/simulate", status_code=202)
-    async def simulate_endpoint(req: SimulateRequest) -> Dict[str, str]:
+    async def simulate_endpoint(req: SimulateRequest) -> dict[str, str]:
         audio_file = req.audio_file or sim_cfg.get("audio_file", "test_audio.wav")
-        session_id = req.session_id or sim_cfg.get(
-            "session_id", "sim-session-001"
-        )
+        session_id = req.session_id or sim_cfg.get("session_id", "sim-session-001")
         playback_speed = float(sim_cfg.get("playback_speed", 1.0))
         chunk_ms = int(asr_cfg.get("chunk_size_ms", 20))
         sample_rate = int(asr_cfg.get("sample_rate", 16000))
@@ -216,9 +209,7 @@ def create_app(
         async def _run_simulation() -> None:
             orch_task = asyncio.create_task(orch.run())
             # Log outbound messages to stdout (mock TTS)
-            log_task = asyncio.create_task(
-                _log_token_stream(ws_send_queue, session_id)
-            )
+            log_task = asyncio.create_task(_log_token_stream(ws_send_queue, session_id))
             try:
                 await simulate_session(
                     wav_path=audio_file,
@@ -250,9 +241,7 @@ def create_app(
 # ------------------------------------------------------------------
 
 
-async def _ws_sender(
-    websocket: WebSocket, send_queue: asyncio.Queue
-) -> None:
+async def _ws_sender(websocket: WebSocket, send_queue: asyncio.Queue) -> None:
     """Drain the send queue and push JSON messages to the WebSocket."""
     try:
         while True:
@@ -267,9 +256,7 @@ async def _ws_sender(
         pass
 
 
-async def _log_token_stream(
-    send_queue: asyncio.Queue, session_id: str
-) -> None:
+async def _log_token_stream(send_queue: asyncio.Queue, session_id: str) -> None:
     """Log outbound messages to stdout (used in simulation mode)."""
     current_turn = []
     try:

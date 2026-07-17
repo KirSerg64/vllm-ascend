@@ -47,7 +47,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 from audio_pipeline import SPEECH_START_EVENT
 from session_manager import SessionState
@@ -80,8 +80,8 @@ class Orchestrator:
         self,
         session: SessionState,
         engine: Any,
-        llm_config: Dict[str, Any],
-        conv_config: Dict[str, Any],
+        llm_config: dict[str, Any],
+        conv_config: dict[str, Any],
         enable_barge_in: bool,
         ws_send_queue: asyncio.Queue,
     ) -> None:
@@ -95,9 +95,7 @@ class Orchestrator:
             "system_prompt",
             "You are a helpful customer support agent.",
         ).strip()
-        self._max_history_turns: int = int(
-            conv_config.get("max_history_turns", 10)
-        )
+        self._max_history_turns: int = int(conv_config.get("max_history_turns", 10))
 
     # ------------------------------------------------------------------
     # Main event loop
@@ -116,9 +114,7 @@ class Orchestrator:
                     self._session.session_id,
                     exc,
                 )
-                await self._ws_queue.put(
-                    {"type": "error", "message": str(exc)}
-                )
+                await self._ws_queue.put({"type": "error", "message": str(exc)})
             finally:
                 queue.task_done()
 
@@ -133,14 +129,12 @@ class Orchestrator:
     # Event handlers
     # ------------------------------------------------------------------
 
-    async def _handle_event(self, event: Dict[str, Any]) -> None:
+    async def _handle_event(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")
 
         if event_type == "asr_partial":
             # Forward partial ASR results to the client for display
-            await self._ws_queue.put(
-                {"type": "asr_partial", "text": event.get("text", "")}
-            )
+            await self._ws_queue.put({"type": "asr_partial", "text": event.get("text", "")})
 
         elif event_type == "asr_endpoint":
             asr_text = event.get("text", "").strip()
@@ -186,9 +180,7 @@ class Orchestrator:
             self._session.is_bot_speaking = True
 
         self._session.metrics.mark_llm_submit()
-        logger.debug(
-            "[%s] Submitting LLM request %s", self._session.session_id, request_id
-        )
+        logger.debug("[%s] Submitting LLM request %s", self._session.session_id, request_id)
 
         # Stream tokens
         full_response = await self._stream_llm(messages, request_id)
@@ -204,9 +196,7 @@ class Orchestrator:
         self._session.metrics.mark_response_complete()
         await self._ws_queue.put({"type": "turn_end"})
 
-    async def _stream_llm(
-        self, messages: List[Dict[str, str]], request_id: str
-    ) -> str:
+    async def _stream_llm(self, messages: list[dict[str, str]], request_id: str) -> str:
         """Submit a generation request and stream tokens to ws_send_queue.
 
         Returns the full concatenated response text.
@@ -233,7 +223,7 @@ class Orchestrator:
 
                 delta = output.outputs[0].text
                 # vLLM streams cumulative text; compute the delta
-                new_text = delta[len(full_text):]
+                new_text = delta[len(full_text) :]
                 if not new_text:
                     continue
 
@@ -257,9 +247,7 @@ class Orchestrator:
                 self._session.session_id,
                 exc,
             )
-            await self._ws_queue.put(
-                {"type": "error", "message": f"LLM error: {exc}"}
-            )
+            await self._ws_queue.put({"type": "error", "message": f"LLM error: {exc}"})
 
         return full_text
 
@@ -290,11 +278,9 @@ class Orchestrator:
     # Prompt construction
     # ------------------------------------------------------------------
 
-    def _build_messages(self) -> List[Dict[str, str]]:
+    def _build_messages(self) -> list[dict[str, str]]:
         """Build the message list for the LLM chat template."""
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": self._system_prompt}
-        ]
+        messages: list[dict[str, str]] = [{"role": "system", "content": self._system_prompt}]
         history = self._session.get_history_window(self._max_history_turns)
         messages.extend(history)
         return messages
