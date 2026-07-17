@@ -43,6 +43,7 @@ POST /simulate
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import Any
@@ -164,10 +165,8 @@ def create_app(
             pipeline.shutdown()
             await orch.shutdown()
             sender_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
                 await asyncio.wait_for(orch_task, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                pass
             await session_manager.remove(session_id)
 
     # ------------------------------------------------------------------
@@ -224,10 +223,8 @@ def create_app(
                 pipeline.shutdown()
                 await orch.shutdown()
                 log_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
                     await asyncio.wait_for(orch_task, timeout=30.0)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
-                    pass
                 await session_manager.remove(session_id)
 
         asyncio.create_task(_run_simulation())

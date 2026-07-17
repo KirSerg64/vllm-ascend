@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import sys
 from pathlib import Path
@@ -221,10 +222,8 @@ async def _run_simulate(config: dict[str, Any], engine: Any, audio_file: str) ->
     await orch.shutdown()
     log_task.cancel()
 
-    try:
+    with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
         await asyncio.wait_for(orch_task, timeout=30.0)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
-        pass
 
     state.metrics.log_summary()
     await session_manager.remove(session_id)

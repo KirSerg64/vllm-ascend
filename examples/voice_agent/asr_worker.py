@@ -96,29 +96,6 @@ class ASRWorker:
 
         logger.info("Loading sherpa-onnx Zipformer-%s from %s", model_size, model_dir)
 
-        # Build endpoint config
-        endpoint_cfg = sherpa_onnx.EndpointConfig(
-            rule1=sherpa_onnx.EndpointRule(
-                must_contain_nonsilence=False,
-                min_trailing_silence=float(self._cfg.get("endpoint_silence_ms", 200)) / 1000.0,
-                min_utterance_length=0.0,
-            ),
-            rule2=sherpa_onnx.EndpointRule(
-                must_contain_nonsilence=True,
-                min_trailing_silence=float(self._cfg.get("endpoint_silence_ms", 200)) / 1000.0,
-                min_utterance_length=0.0,
-            ),
-            rule3=sherpa_onnx.EndpointRule(
-                must_contain_nonsilence=True,
-                min_trailing_silence=0.0,
-                min_utterance_length=20.0,
-            ),
-        )
-
-        feat_config = sherpa_onnx.FeatureExtractorConfig(
-            sampling_rate=sample_rate,
-        )
-
         # Expect model files in model_dir with standard sherpa-onnx naming
         self._recognizer = sherpa_onnx.OnlineRecognizer.from_transducer(
             encoder=os.path.join(model_dir, "encoder-epoch-99-avg-1.int8.onnx"),

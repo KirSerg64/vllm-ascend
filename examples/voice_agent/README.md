@@ -34,11 +34,11 @@ Audio → [VAD] → [ASR: WebSocket/Qwen-ASR or sherpa-onnx] → [LLM: Qwen3-0.6
 ### ASR Backend Options
 
 - **Option 1: WebSocket-based ASR (qwen-asr)**
-  - A qwen-asr model running on port 8008 (or configure another port)
-  - No additional model downloads required
+    - A qwen-asr model running on port 8008 (or configure another port)
+    - No additional model downloads required
 
 - **Option 2: Local sherpa-onnx**
-  - A [sherpa-onnx streaming Zipformer model](#sherpa-onnx-backend)
+    - A [sherpa-onnx streaming Zipformer model](#sherpa-onnx-backend)
 
 ---
 
