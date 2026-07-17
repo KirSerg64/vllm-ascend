@@ -3,7 +3,14 @@
 # See README.md for detailed parameter descriptions.
 
 asr:
-  # sherpa-onnx model type (currently only "zipformer" is supported)
+  # ASR backend type: "websocket" | "sherpa-onnx"
+  backend: "websocket"
+  
+  # WebSocket backend configuration (for qwen-asr)
+  websocket_host: "localhost"
+  websocket_port: 8008
+  
+  # sherpa-onnx model type (used when backend: "sherpa-onnx")
   model: "zipformer"
   # Model size variant: "tiny" | "small" | "large"
   # Smaller = lower latency; larger = better accuracy
@@ -11,6 +18,7 @@ asr:
   # Directory where sherpa-onnx model files are stored.
   # Set via env var SHERPA_ONNX_MODEL_DIR or override here.
   model_dir: ""
+  
   # Audio sample rate expected by the ASR model
   sample_rate: 16000
   # Duration of each audio chunk fed to ASR, in milliseconds

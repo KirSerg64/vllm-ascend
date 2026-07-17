@@ -102,12 +102,20 @@ async def _prewarm_engine(engine: Any, system_prompt: str) -> None:
 async def _run_server(config: Dict[str, Any], engine: Any) -> None:
     import uvicorn  # type: ignore[import]
 
-    from asr_worker import ASRWorker
     from server import create_app
     from session_manager import SessionManager
 
-    # Load ASR model
-    asr_worker = ASRWorker(config.get("asr", {}))
+    # Load ASR model based on backend configuration
+    asr_cfg = config.get("asr", {})
+    backend = asr_cfg.get("backend", "sherpa-onnx")
+    
+    if backend == "websocket":
+        from asr_worker_websocket import ASRWorkerWebSocket
+        asr_worker = ASRWorkerWebSocket(asr_cfg)
+    else:
+        from asr_worker import ASRWorker
+        asr_worker = ASRWorker(asr_cfg)
+    
     asr_worker.load()
 
     session_manager = SessionManager(
@@ -140,7 +148,6 @@ async def _run_simulate(
     config: Dict[str, Any], engine: Any, audio_file: str
 ) -> None:
     """Run a single offline simulation session without starting a web server."""
-    from asr_worker import ASRWorker
     from audio_pipeline import AudioPipeline
     from orchestrator import Orchestrator
     from server import _log_token_stream
@@ -160,8 +167,16 @@ async def _run_simulate(
     sample_rate = int(asr_cfg.get("sample_rate", 16000))
     enable_barge_in = bool(server_cfg.get("enable_barge_in", True))
 
-    # Load ASR
-    asr_worker = ASRWorker(asr_cfg)
+    # Load ASR based on backend configuration
+    backend = asr_cfg.get("backend", "sherpa-onnx")
+    
+    if backend == "websocket":
+        from asr_worker_websocket import ASRWorkerWebSocket
+        asr_worker = ASRWorkerWebSocket(asr_cfg)
+    else:
+        from asr_worker import ASRWorker
+        asr_worker = ASRWorker(asr_cfg)
+    
     asr_worker.load()
 
     session_manager = SessionManager()

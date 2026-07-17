@@ -5,11 +5,12 @@ model to an LLM, targeting **TTFA (Time-To-First-Audio) < 200 ms** on Ascend
 910B NPU.
 
 ```
-Audio → [VAD] → [ASR: Zipformer/sherpa-onnx] → [LLM: Qwen3-0.6B via AsyncLLMEngine] → Token stream (mock TTS)
+Audio → [VAD] → [ASR: WebSocket/Qwen-ASR or sherpa-onnx] → [LLM: Qwen3-0.6B via AsyncLLMEngine] → Token stream (mock TTS)
 ```
 
 ## Features
 
+- **Flexible ASR Backend**: Supports both WebSocket-based ASR (e.g., qwen-asr) and local sherpa-onnx models
 - **Chunked streaming**: ASR streams partial hypotheses in real time; LLM starts
   as soon as a phrase endpoint is detected
 - **Barge-in**: Configurable soft-cancel of LLM generation when user starts
@@ -29,6 +30,14 @@ Audio → [VAD] → [ASR: Zipformer/sherpa-onnx] → [LLM: Qwen3-0.6B via AsyncL
 - Ascend 910B NPU with CANN 8.x installed
 - Python 3.10+
 - vllm-ascend installed (provides `vllm`)
+
+### ASR Backend Options
+
+**Option 1: WebSocket-based ASR (qwen-asr)**
+- A qwen-asr model running on port 8008 (or configure another port)
+- No additional model downloads required
+
+**Option 2: Local sherpa-onnx**
 - A [sherpa-onnx streaming Zipformer model](#asr-model-download)
 
 ---
@@ -42,7 +51,25 @@ pip install -r requirements.txt
 
 ---
 
-## ASR Model Download
+## ASR Configuration
+
+### WebSocket Backend (qwen-asr)
+
+Set in `config.yaml`:
+
+```yaml
+asr:
+  backend: "websocket"
+  websocket_host: "localhost"
+  websocket_port: 8008
+  sample_rate: 16000
+  chunk_size_ms: 20
+  endpoint_silence_ms: 200
+```
+
+Ensure the qwen-asr model is running on the configured port before starting the voice agent.
+
+### sherpa-onnx Backend
 
 Download a streaming Zipformer model from the
 [sherpa-onnx releases](https://github.com/k2-fsa/sherpa-onnx/releases) page.
@@ -55,8 +82,20 @@ sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2
 tar xf sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2
 ```
 
-Then set `asr.model_dir` in `config.yaml` (or export
-`SHERPA_ONNX_MODEL_DIR=/path/to/model`).
+Then set in `config.yaml`:
+
+```yaml
+asr:
+  backend: "sherpa-onnx"
+  model: "zipformer"
+  model_size: "small"
+  model_dir: "/path/to/sherpa-onnx-streaming-zipformer-en-2023-06-26"
+  sample_rate: 16000
+  chunk_size_ms: 20
+  endpoint_silence_ms: 200
+```
+
+Or export `SHERPA_ONNX_MODEL_DIR=/path/to/model`.
 
 Expected directory layout:
 
@@ -76,8 +115,11 @@ All parameters are in `config.yaml`.  Key tuning levers:
 
 | Parameter | Default | Effect |
 |---|---|---|
+| `asr.backend` | sherpa-onnx | Backend type: `websocket` or `sherpa-onnx` |
+| `asr.websocket_host` | localhost | Host for websocket ASR service (websocket backend only) |
+| `asr.websocket_port` | 8008 | Port for websocket ASR service (websocket backend only) |
 | `asr.endpoint_silence_ms` | 200 | Lower = faster TTFA but more false endpoints |
-| `asr.model_size` | small | `tiny` / `small` / `large` trade accuracy vs latency |
+| `asr.model_size` | small | `tiny` / `small` / `large` trade accuracy vs latency (sherpa-onnx only) |
 | `llm.max_tokens` | 512 | Caps response length |
 | `llm.enforce_eager` | false | Set `true` to skip CANN graph capture (debug) |
 | `conversation.max_history_turns` | 10 | Older turns evicted FIFO; affects prompt length |

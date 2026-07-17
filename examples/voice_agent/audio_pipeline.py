@@ -250,7 +250,11 @@ class AudioPipeline:
 
     async def _on_speech_start(self) -> None:
         self._is_speech_active = True
-        self._asr_stream = self._asr.create_stream()
+        # Handle both sync and async create_stream methods
+        if asyncio.iscoroutinefunction(self._asr.create_stream):
+            self._asr_stream = await self._asr.create_stream()
+        else:
+            self._asr_stream = self._asr.create_stream()
         self._last_partial_ref = [""]
         self._session.reset_turn()
         self._session.metrics.mark_speech_start()
@@ -282,6 +286,10 @@ class AudioPipeline:
         )
         if endpoint:
             self._session.metrics.mark_asr_endpoint()
-            self._asr.reset_stream(self._asr_stream)
+            # Handle both sync and async reset_stream methods
+            if asyncio.iscoroutinefunction(self._asr.reset_stream):
+                await self._asr.reset_stream(self._asr_stream)
+            else:
+                self._asr.reset_stream(self._asr_stream)
             self._is_speech_active = False
             self._speech_sample_count = 0
