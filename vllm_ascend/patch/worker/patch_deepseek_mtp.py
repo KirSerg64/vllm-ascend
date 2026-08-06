@@ -51,8 +51,12 @@ class AscendDeepSeekMultiTokenPredictorLayer(DeepSeekMultiTokenPredictorLayer):
         hidden_states = self.eh_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
 
         hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
-        hidden_states = residual + hidden_states
-        return hidden_states
+        hidden_states = residual + hidden_states  # pre-final-norm (logits hidden)
+        # Recycle the post-final-norm hidden into the next draft step.
+        # compute_logits applies shared_head (== final norm) to the pre-norm
+        # element, so logits and the recycle each get exactly one final-norm.
+        # Matches SGLang's deepseek_nextn.
+        return hidden_states, self.shared_head(hidden_states)
 
 
 class AscendDeepSeekMTP(DeepSeekMTP):
@@ -61,6 +65,11 @@ class AscendDeepSeekMTP(DeepSeekMTP):
             return super()._rewrite_spec_layer_name(spec_layer, name)
         else:
             return f"model.layers.{spec_layer}.rot.weight"
+
+    def load_weights(self, weights):
+        if self.quant_config is not None and (cache_scale_mapper := self.quant_config.get_cache_scale_mapper()):
+            weights = cache_scale_mapper.apply(weights)
+        return super().load_weights(weights)
 
 
 class AscendGlmMoeDsaForCausalLM(GlmMoeDsaForCausalLM):
