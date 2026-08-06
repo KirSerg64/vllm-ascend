@@ -1,0 +1,10 @@
+sherpa-onnx>=1.10.0
+silero-vad>=5.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+websockets>=13.0
+soundfile>=0.12.0
+scipy>=1.13.0
+pyyaml>=6.0
+numpy>=1.24.0
+# vllm is provided by the vllm-ascend environment — do not pin here

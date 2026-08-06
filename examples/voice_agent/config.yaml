@@ -1,0 +1,86 @@
+# Voice Agent Configuration
+# All pipeline parameters are tunable here.
+# See README.md for detailed parameter descriptions.
+
+asr:
+  # ASR backend type: "websocket" | "sherpa-onnx"
+  backend: "websocket"
+
+  # WebSocket backend configuration (for qwen-asr)
+  websocket_host: "localhost"
+  websocket_port: 8008
+
+  # sherpa-onnx model type (used when backend: "sherpa-onnx")
+  model: "zipformer"
+  # Model size variant: "tiny" | "small" | "large"
+  # Smaller = lower latency; larger = better accuracy
+  model_size: "small"
+  # Directory where sherpa-onnx model files are stored.
+  # Set via env var SHERPA_ONNX_MODEL_DIR or override here.
+  model_dir: ""
+
+  # Audio sample rate expected by the ASR model
+  sample_rate: 16000
+  # Duration of each audio chunk fed to ASR, in milliseconds
+  chunk_size_ms: 20
+  # Silence duration (ms) before an endpoint is declared.
+  # Tune this as the primary TTFA knob: lower = faster but more false endpoints.
+  endpoint_silence_ms: 200
+  # Minimum number of non-blank frames before endpoint can be triggered
+  min_trailing_silence_frames: 8
+
+vad:
+  enabled: true
+  # Speech detection threshold for silero-vad (0.0 – 1.0)
+  threshold: 0.5
+  # Window size for VAD inference, in milliseconds (must be 32 or 64 for silero-vad)
+  window_size_ms: 32
+  # Minimum speech duration to consider valid (ms); shorter bursts are ignored
+  min_speech_duration_ms: 100
+  # Time after speech end to keep VAD "active" (prevents false re-triggers)
+  speech_pad_ms: 50
+
+llm:
+  # HuggingFace model identifier
+  model: "Qwen/Qwen3-0.6B-W8A8"
+  # Maximum number of new tokens to generate per turn
+  max_tokens: 512
+  # Sampling temperature (0.0 = greedy / deterministic)
+  temperature: 0.7
+  # Top-p nucleus sampling
+  top_p: 0.9
+  # Tensor parallelism degree (set to number of NPU cards to use)
+  tensor_parallel_size: 1
+  # Maximum concurrent sequences in the engine scheduler
+  max_num_seqs: 32
+  # Set true to disable CANN graph capture (useful for debugging / first run)
+  enforce_eager: false
+  # Pre-warm the engine at startup with a dummy request to avoid cold-start latency
+  prewarm_on_startup: true
+
+conversation:
+  # System prompt injected at the start of every conversation
+  system_prompt: >
+    You are a helpful and concise customer support agent.
+    Answer the user's questions clearly and briefly.
+    If you need clarification, ask one focused question.
+  # Maximum number of prior turns (user + assistant pairs) to include in LLM context.
+  # Older turns are evicted FIFO to bound prompt length.
+  max_history_turns: 10
+
+server:
+  host: "0.0.0.0"
+  port: 8765
+  # Session idle timeout in minutes — sessions inactive longer are evicted
+  session_timeout_minutes: 30
+  # CORS origins to allow (use ["*"] for development)
+  cors_origins:
+    - "*"
+
+simulation:
+  # Path to WAV audio file used for offline simulation
+  audio_file: "test_audio.wav"
+  # Playback speed multiplier (1.0 = real-time, 2.0 = twice as fast)
+  playback_speed: 1.0
+  # Session ID used for the simulated session
+  session_id: "sim-session-001"
